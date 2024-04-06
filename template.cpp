@@ -3,6 +3,7 @@
 #include <cmath>
 #include <random>
 #include <omp.h>
+#include <iostream>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -10,7 +11,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-static std :: default_random_engine engine[8] ;
+static std::default_random_engine engine[8] ;
 static std::uniform_real_distribution<double> uniform(0, 1);
 
 double sqr(double x) { return x * x;}
@@ -171,11 +172,11 @@ public:
 			
 		if (inter){
 
-			if (objects[objectID].isMirror) {
-				Ray reflected(P+0.001 * N, r.u - 2*dot(r.u, N) * N); // direction of reflection
+			if (objects[objectID].isMirror) { // computations for mirror surfaces (reflection)
+				Ray reflected(P + 0.001 * N, r.u - 2 * dot(r.u, N) * N); // ray of reflection
 				return getColor(reflected, bounce-1); // recur on surfaces to continue mirroring
 			}
-			if (objects[objectID].isTransparent) { // computations for transparent surfaces following lecture 1
+			if (objects[objectID].isTransparent) { // computations for transparent surfaces following lecture 1 (refraction)
 				double n1 = 1;
 				double n2 = 1.5;
 
@@ -188,16 +189,25 @@ public:
 				Vector Tt = n1/ n2 * (r.u - dot(r.u, correctN) * correctN);
 				double d = 1 - sqr(n1 / n2) * (1 - sqr(dot(r.u, correctN)));
 				if (d < 0) {
-					Ray reflected(P+0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
+					Ray reflected(P + 0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
 					return getColor(reflected, bounce-1);
 				}
 
 				Vector Tn = -sqrt(d) * correctN;
 				Vector T = Tn + Tt;
 
+				// Fresnel
+				double k0 = sqr(n1 - n2) / sqr(n1 + n2);
+				double R = k0 + (1 - k0)* pow(1 - std::abs(dot(correctN, r.u)), 5); // reflection coefficient
+				double u = (double)rand()/(double)RAND_MAX;
+				if (u < R){
+					Ray reflected(P + 0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
+					return getColor(reflected, bounce-1);
+				}
+
 				Ray refracted(P - 0.001 * correctN, T);
 				return getColor(refracted, bounce-1);
-			} // here add fresnel transparent
+			} 
 
 			// direct light
 			Vector wlight = L - P;
@@ -220,24 +230,13 @@ public:
 			Vector wi = random_cos(N);
 			Ray indirectRay(P + 0.001 * N, wi); 
 			return objects[objectID].albedo * getColor(indirectRay, bounce - 1) + color;
-			/* double diffuse_probability = rho_d/(rho_d+rho_s) ; // we should use some color←-average of rho d and rho s
-			if (uniform(engine) < diffuse_probability) { 
-				// we sample the diffuse lobe
-			Ray randomRay = . . . ; // randomly sample ray using random cos
-			Lo += albedo/diffuse_probability * getColor(randomRay , ray_depth=1); }
-			else{
-			Ray randomRay = . . . ; // randomly sample ray using random pow and mirroring ←- of ray. direction
-			if (dot(randomRay.direction, N) < 0) return Vector(0., 0., 0.); // make sure←- we sampled the upper hemisphere
-			Vector brdf_indirect = rho_s * (alpha+8)/(8*M_PI)* PhongSpecularLobe (...) ; ←- // just the specular part of the Blinn=Phong model
-			double pdf_pow = . . . ; // the pdf associated with our function random pow ←- with the reflection
-			Lo += brdf_indirect* std::max(dot(N, randomRay.direction), 0.)/((1=-diffuse_probability)*pdf_pow) * getColor(randomRay , ray_depth=1) ;*/
 		}
 		return color;
 	}
 
 	std::vector<Sphere> objects;
 	Vector L;
-	double I;
+	double I; // light intensity
 };
 
 int main() {
@@ -255,18 +254,19 @@ int main() {
 	Scene s;
 	// Spheres
 	s.addSphere(Sphere(Vector(0,0,0), 10, Vector(1, 0.5, 0.3), false, false));
-	s.addSphere(Sphere(Vector(-10,0,10), 10, Vector(1, 0.5, 0.3), true, false));
-	s.addSphere(Sphere(Vector(10,0,-10), 10, Vector(1, 0.5, 0.3), false, true));
+	s.addSphere(Sphere(Vector(20,0,0), 10, Vector(1, 0.5, 0.3), false, true));
+	//s.addSphere(Sphere(Vector(20,0,0), 9, Vector(1, 0.5, 0.3), false, true));
+	s.addSphere(Sphere(Vector(-20,0,0), 10, Vector(1, 0.5, 0.3), true, false));
 	// Ceiling and floor
-	s.addSphere(Sphere(Vector(1000,0,0), 900, Vector(0.7, 0.4, 0.2))); 
-	s.addSphere(Sphere(Vector(-1000,0,0), 900, Vector(0.5, 0.9, 0.1)));
+	s.addSphere(Sphere(Vector(0,1000,0), 940, Vector(1, 0, 0))); // Ceiling
+	s.addSphere(Sphere(Vector(0,-1000,0), 990, Vector(0, 0, 1))); // Floor
 	// Walls
-	s.addSphere(Sphere(Vector(0,1000,0), 940, Vector(0.2, 0.4, 0.7))); // Change to red
-	s.addSphere(Sphere(Vector(0,-1000,0), 990, Vector(0.2, 0.7, 0.4))); // Change to blue 
-	s.addSphere(Sphere(Vector(0,0,1000), 940, Vector(0.5, 0.4, 0.5))); // change to pink
-	s.addSphere(Sphere(Vector(0,0,-1000), 940, Vector(0.9, 0.3, 0.1))); // change to green
+	s.addSphere(Sphere(Vector(1000,0,0), 920, Vector(0.1, 0.5, 0.8))); // right
+	s.addSphere(Sphere(Vector(-1000,0,0), 920, Vector(0.5, 0.9, 0.1))); // left
+	s.addSphere(Sphere(Vector(0,0,1000), 940, Vector(0.7, 0.2, 0.5))); // back
+	s.addSphere(Sphere(Vector(0,0,-1000), 940, Vector(0, 1, 0))); // front
 
-	Vector C(0,0,55);
+	Vector C(0,0,55); // camera view
 	s.L = Vector(-10, 20, 40); // Light ray
 	s.I = 2E10;
 
@@ -276,7 +276,7 @@ int main() {
 		int tid = omp_get_thread_num();
 		for (int j = 0; j < W; j++) {
 
-			Vector color;
+			Vector pixelColor;
 			for (int k = 0; k < nrays; k++){
 
 				// box Muller
@@ -289,12 +289,12 @@ int main() {
 				Vector u(j-W/2+0.5+r1, H/2-i-0.5+r2, z);
 				u.normalize();
 				Ray r(C, u);
-				color += s.getColor(r, 5)/nrays;		
+				pixelColor += s.getColor(r, 5)/nrays;		
 			}
 
-			image[(i * W + j) * 3 + 0] = std::min(255.0, std::pow(color[0], 0.45)); // including gamma correction
-			image[(i * W + j) * 3 + 1] = std::min(255.0, std::pow(color[1], 0.45)); 
-			image[(i * W + j) * 3 + 2] = std::min(255., std::pow(color[2], 0.45));
+			image[(i * W + j) * 3 + 0] = std::min(255.0, std::pow(pixelColor[0], 0.45)); // including gamma correction
+			image[(i * W + j) * 3 + 1] = std::min(255.0, std::pow(pixelColor[1], 0.45)); 
+			image[(i * W + j) * 3 + 2] = std::min(255.0, std::pow(pixelColor[2], 0.45));
 		}
 	}
 	stbi_write_png("image.png", W, H, 3, &image[0], 0);
