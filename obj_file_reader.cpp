@@ -1,8 +1,8 @@
 #include <string>
+#include <vector>
 #include <iostream>
 #include <stdio.h>
 #include <algorithm>
-#include <vector>
 
 class TriangleIndices {
 public:
@@ -14,12 +14,11 @@ public:
 	int group;       // face group
 };
 
-
 class TriangleMesh {
 public:
   ~TriangleMesh() {}
 	TriangleMesh() {};
-	
+
 	void readOBJ(const char* obj) {
 
 		char matfile[255];
