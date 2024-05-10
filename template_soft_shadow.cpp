@@ -343,7 +343,7 @@ int main() {
 			image[(i * W + j) * 3 + 2] = std::min(255.0, std::pow(pixelColor[2], 0.45));
 		}
 	}
-	stbi_write_png("image_soft_shadow.png", W, H, 3, &image[0], 0);
+	stbi_write_png("images/image_soft_shadow.png", W, H, 3, &image[0], 0);
 
 	return 0;
 }
