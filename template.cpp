@@ -184,7 +184,7 @@ public:
 
 	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
 		bool hasInter = false;
-		t = 10E9;
+		t = 1E9;
 
 		if (!bbox.intersect(r)) return false;
 
@@ -192,6 +192,7 @@ public:
 			const Vector &A = vertices[indices[i].vtxi];
 			const Vector &B = vertices[indices[i].vtxj];
 			const Vector &C = vertices[indices[i].vtxk];
+
 			Vector e1 = B - A;
 			Vector e2 = C - A;
 			Vector localN = cross(e1, e2);
@@ -207,7 +208,6 @@ public:
 
 			double gamma = -dot(e1, OAcrossU) * invUdotN;
 			if (gamma < 0) continue;
-			if (gamma > 1) continue;
 
 			double alpha = 1 - beta - gamma;
 			if (alpha < 0) continue;
@@ -215,7 +215,7 @@ public:
 			hasInter = true;
 			if (local_t < t) {
 				t = local_t;
-				P = r.O * t * r.u;
+				P = A + beta * e1 + gamma * e2;
 				N = localN;
 			}
 		}
@@ -527,7 +527,7 @@ public:
 			color = l * objects[objectID]->albedo / M_PI; // add the material in color
 			if (intersect(rShadow, Pshadow, Nshadow, objectshadow, tshadow)){
 				if (sqr(tshadow) < dlight2){
-					color = Vector(0,0,0);
+					color = Vector(0,0,0); 
 				}
 			}
 
@@ -536,6 +536,7 @@ public:
 			Ray indirectRay(P + 0.001 * N, wi); 
 			return objects[objectID]->albedo * getColor(indirectRay, bounce - 1) + color;
 		}
+		//std::cout << 1 << std::endl;
 		return color;
 	}
 
@@ -547,7 +548,7 @@ public:
 int main() {
 	int W = 264;
 	int H = 264;
-	int nrays = 2;
+	int nrays = 10;
 
 	double fov = 60 * M_PI / 180;
 	double z = -W/(2*tan(fov/2));
@@ -571,8 +572,8 @@ int main() {
 	s.addSphere(new Sphere(Vector(0,0,1000), 940, Vector(0.7, 0.2, 0.5))); // back
 	s.addSphere(new Sphere(Vector(0,0,-1000), 940, Vector(0, 1, 0))); // front
 
-	TriangleMesh *m = new TriangleMesh(Vector(0.7, 0.4, 0.6));
-	m->readOBJ("cat.obj");
+	TriangleMesh *m = new TriangleMesh(Vector(0.2, 0.4, 0.6));
+	m->readOBJ("cat_model/cat.obj");
 	m->translate_and_scale(Vector(0,-10,0), 0.8);
 	m->compute_bbox();
 	s.addMesh(m);
