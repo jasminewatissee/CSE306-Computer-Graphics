@@ -11,3 +11,9 @@ template: template.o
 
 template.o: template.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+soft_shadow: template_soft_shadow.o
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+template_soft_shadow.o: template_soft_shadow.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<

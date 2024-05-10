@@ -107,7 +107,7 @@ public:
 
 class Sphere {
 public:
-	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isLight = false) : C(C), albedo(albedo), R(R), isMirror(isMirror), isTransparent(isTransparent), isLight(isLight) {};
+	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isLight = false, bool isInverted = false) : C(C), albedo(albedo), R(R), isMirror(isMirror), isTransparent(isTransparent), isLight(isLight), isInverted(isInverted) {};
 
 	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
 		double delta = sqr(dot(r.u, r.O-C)) - ((r.O-C).norm2() - R*R);
@@ -127,30 +127,21 @@ public:
 		P = r.O + t * r.u;
 		N = P - C;
 		N.normalize();
+
+		if (isInverted){
+			N = (-1.)*N;
+		}
 		return true;
 	}
 
 	Vector C, albedo;
 	double R;
-	bool isMirror, isTransparent, isLight;
+	bool isMirror, isTransparent, isLight, isInverted;
 };
-
-Vector getRandomPointOnSphere(const Sphere& sphere) {
-	int tid = omp_get_thread_num();
-    double theta = uniform(engine[tid]) * 2 * M_PI;
-    double phi = acos(uniform(engine[tid]) * 2 - 1);
-
-    // Convert spherical coordinates to Cartesian coordinates
-    double x = sphere.C[0] + sphere.R * sin(phi) * cos(theta);
-    double y = sphere.C[1] + sphere.R * sin(phi) * sin(theta);
-    double z = sphere.C[2] + sphere.R * cos(phi);
-
-    return Vector(x,y,z);
-}
 
 class Scene{
 public:
-	Scene(std::vector<Sphere> objects, Sphere L, double I) : objects(objects), L(L), I(I) {}
+	Scene(std::vector<Sphere> objects, Vector L, double I, double Rad) : objects(objects), L(L), Rad(Rad), I(I) {}
 
 	bool intersect(const Ray& r, Vector& P, Vector& N, int& objectID, double& bestt ) const {
 		bestt = 1E9;
@@ -176,7 +167,7 @@ public:
 		objects.push_back(s);
 	}
 
-	Vector getColor(const Ray& r, int bounce, bool last_bounce_diffuse){
+	Vector getColor(const Ray& r, int bounce, bool last_bounce_diffuse = false){
 		Vector color(0,0,0);
 		if (bounce < 0) return color;
 
@@ -187,15 +178,16 @@ public:
 			
 		if (inter){
 			if(objects[objectID].isLight){
+				double R = Rad;
 				if (last_bounce_diffuse) {
-					return Vector(0,0,0);
+					return Vector(0., 0., 0.);
 				} else {
-					return Vector(1. ,1. ,1.)*I/(4*sqr(M_PI* objects[objectID].R));
+					return Vector(1. ,1. ,1.)*I/(4*sqr(M_PI* R));
 				}
 			}
 			if (objects[objectID].isMirror) { // computations for mirror surfaces (reflection)
 				Ray reflected(P + 0.001 * N, r.u - 2 * dot(r.u, N) * N); // ray of reflection
-				return getColor(reflected, bounce-1, false); // recur on surfaces to continue mirroring
+				return getColor(reflected, bounce-1); // recur on surfaces to continue mirroring
 			}
 			if (objects[objectID].isTransparent) { // computations for transparent surfaces following lecture 1 (refraction)
 				double n1 = 1;
@@ -211,7 +203,7 @@ public:
 				double d = 1 - sqr(n1 / n2) * (1 - sqr(dot(r.u, correctN)));
 				if (d < 0) {
 					Ray reflected(P + 0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
-					return getColor(reflected, bounce-1, false);
+					return getColor(reflected, bounce-1);
 				}
 
 				Vector Tn = -sqrt(d) * correctN;
@@ -223,37 +215,57 @@ public:
 				double u = (double)rand()/(double)RAND_MAX;
 				if (u < R){
 					Ray reflected(P + 0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
-					return getColor(reflected, bounce-1, false);
+					return getColor(reflected, bounce-1);
 				}
 
 				Ray refracted(P - 0.001 * correctN, T);
-				return getColor(refracted, bounce-1, false);
+				return getColor(refracted, bounce-1);
 			} 
 
-			// direct light
 			/*
+			// direct light
 			Vector wlight = L - P;
 			double dlight2 = wlight.norm2();
 			wlight.normalize();
-			double l = I/(4 * M_PI * dlight2) * std::max(0.0,dot(N, wlight)); // color with direct light
-			color = l * objects[objectID].albedo / M_PI; // add the material in color
-			*/
-			Vector xprime = getRandomPointOnSphere(objects[objectID]); // random point on light sphere
-			Vector Nprime = (xprime - objects[objectID].C) / (xprime - objects[objectID].C).norm();
-			Vector omega_i = (xprime - P)/(xprime - P).norm();
-			double l = I/(4*sqr(M_PI* objects[objectID].R)) * std::max(0.0,dot(N, omega_i)) * std::max(dot(Nprime, -omega_i), 0.0)/((xprime - P).norm2()); // color with direct light
-			color = l * objects[objectID].albedo / M_PI; // add the material in color
-
-			/*double tshadow;
+			double tshadow;
 			Vector Pshadow, Nshadow;
 			int objectshadow;
-			Ray rShadow(P + 0.001 * N, omega_i);
+			Ray rShadow(P + 0.001 * N, wlight);
 
+			double l = I/(4 * M_PI * dlight2) * std::max(0.0,dot(N, wlight)); // color with direct light
+			color = l * objects[objectID].albedo / M_PI; // add the material in color
 			if (intersect(rShadow, Pshadow, Nshadow, objectshadow, tshadow)){
-				if (sqr(tshadow) < (xprime - P).norm2()){
-					color = Vector(0,0,0);
+				if (sqr(tshadow) < dlight2){
+					color = Vector(0,0,0); 
 				}
-			}*/
+			}
+
+			// add indirect light
+			Vector wi = random_cos(N);
+			Ray indirectRay(P + 0.001 * N, wi); 
+			return objects[objectID].albedo * getColor(indirectRay, bounce - 1) + color;
+			*/
+			
+			// direct light
+			double R = Rad;
+			Vector c = objects[objectID].C - L;
+			c.normalize();
+			Vector xprime = R * random_cos(c) + L; // random point on light sphere
+			Vector Nprime = (xprime - L) / (xprime - L).norm();
+			Vector omega_i = (xprime - P)/(xprime - P).norm();
+			Ray lightRay = Ray(P, omega_i);
+			Vector Plightray, Nlightray;
+			double tlightray;
+			bool lightIntersect = intersect(lightRay, Plightray, Nlightray, objectID, tlightray);
+			double visibility;
+			if (lightIntersect && tlightray <= (xprime - P).norm()){
+				visibility = 0;
+			} else {
+				visibility = 1;
+			}
+			double pdf = dot(Nprime, c) / (M_PI*R*R);
+			double l = I/(4*sqr(M_PI* R)) * std::max(0.0,dot(N, omega_i)) * std::max(dot(Nprime, -omega_i), 0.0)/((xprime - P).norm2()*pdf); // color with direct light
+			color = l * objects[objectID].albedo / M_PI * visibility; // add the material in color
 
 			// add indirect light
 			Vector wi = random_cos(N);
@@ -264,7 +276,8 @@ public:
 	}
 
 	std::vector<Sphere> objects;
-	Sphere L; // light point/sphere
+	Vector L; // light point/sphere
+	double Rad; // light radius
 	double I; // light intensity
 };
 
@@ -281,13 +294,16 @@ int main() {
 	}
 
 	std::vector<Sphere> objects;
-	Sphere L = Sphere(Vector(-10, 20, 40), 5, Vector(0,0,0), false, false, true); // Light sphere
+	Vector L = Vector(-10, 20, 40); // Light sphere
 	double I = 2E10; // light intensity
-	Scene s(objects, L, I);
+	double light_radius = 5;
+	Scene s(objects, L, I, light_radius);
+	// Light Source
+	s.addSphere(Sphere(L, light_radius, Vector(1,1,1), false, false, true));
 	// Spheres
-	s.addSphere(Sphere(Vector(0,0,0), 10, Vector(1, 0.5, 0.3), false, false));
+	s.addSphere(Sphere(Vector(0,0,0), 10, Vector(1, 0.5, 0.3), false, true));
 	s.addSphere(Sphere(Vector(20,0,0), 10, Vector(1, 0.5, 0.3), false, true));
-	//s.addSphere(Sphere(Vector(20,0,0), 9, Vector(1, 0.5, 0.3), false, true));
+	s.addSphere(Sphere(Vector(20,0,0), 9.5, Vector(1, 0.5, 0.3), false, true, false, true));
 	s.addSphere(Sphere(Vector(-20,0,0), 10, Vector(1, 0.5, 0.3), true, false));
 	// Ceiling and floor
 	s.addSphere(Sphere(Vector(0,1000,0), 940, Vector(1, 0, 0))); // Ceiling
@@ -319,7 +335,7 @@ int main() {
 				Vector u(j-W/2+0.5+r1, H/2-i-0.5+r2, z);
 				u.normalize();
 				Ray r(C, u);
-				pixelColor += s.getColor(r, 5, false)/nrays;		
+				pixelColor += s.getColor(r, 5)/nrays;		
 			}
 
 			image[(i * W + j) * 3 + 0] = std::min(255.0, std::pow(pixelColor[0], 0.45)); // including gamma correction
@@ -327,7 +343,7 @@ int main() {
 			image[(i * W + j) * 3 + 2] = std::min(255.0, std::pow(pixelColor[2], 0.45));
 		}
 	}
-	stbi_write_png("image.png", W, H, 3, &image[0], 0);
+	stbi_write_png("image_soft_shadow.png", W, H, 3, &image[0], 0);
 
 	return 0;
 }
