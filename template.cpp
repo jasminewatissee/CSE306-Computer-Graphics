@@ -159,6 +159,13 @@ public:
 	}
 };
 
+class BVH {
+public:
+	BVH *left, *right;
+	int start, end;
+	BoundingBox bbox;
+};
+
 class TriangleMesh : public Geometry {
 public:
 	TriangleMesh(const Vector& albedo, bool isMirror = false, bool isTransparent = false) : ::Geometry(albedo, isMirror, isTransparent) {};
@@ -170,25 +177,33 @@ public:
 		}
 	}
 
-	void compute_bbox() {
+	BoundingBox compute_bbox(int triangle_start, int triangle_end) {
+		BoundingBox bbox;
+
 		bbox.m = Vector(1E9, 1E9, 1E9);
 		bbox.M = Vector(-1E9, -1E9, -1E9);
 
-		for (int i = 0; i < vertices.size(); i++){
+		for (int i = triangle_start; i < triangle_end; i++){
 			for (int j = 0; j < 3; j++){
-				bbox.m[j] = std::min(bbox.m[j], vertices[i][j]);
-				bbox.M[j] = std::max(bbox.M[j], vertices[i][j]);
+				bbox.m[j] = std::min(bbox.m[j], vertices[indices[i].vtxi][j]);
+				bbox.M[j] = std::max(bbox.M[j], vertices[indices[i].vtxi][j]);
+				bbox.m[j] = std::min(bbox.m[j], vertices[indices[i].vtxj][j]); 
+				bbox.M[j] = std::max(bbox.M[j], vertices[indices[i].vtxj][j]);
+				bbox.m[j] = std::min(bbox.m[j], vertices[indices[i].vtxk][j]);
+				bbox.M[j] = std::max(bbox.M[j], vertices[indices[i].vtxk][j]);
 			}
 		}
+		return bbox;
 	}
 
 	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
 		bool hasInter = false;
 		t = 1E9;
 
-		if (!bbox.intersect(r)) return false;
+		if (!bvh.bbox.intersect(r)) return false;
 
-		for (int i=0; i<indices.size(); i++){
+		// Without BVH
+		/* for (int i=0; i<indices.size(); i++){
 			const Vector &A = vertices[indices[i].vtxi];
 			const Vector &B = vertices[indices[i].vtxj];
 			const Vector &C = vertices[indices[i].vtxk];
@@ -222,7 +237,71 @@ public:
 		if (hasInter){
 			N.normalize();
 		}
-		return hasInter;
+		return hasInter; */
+		
+		//std::list<BVH*> l;
+		const BVH* l[32];
+		int list_size = 0;
+		//l.push_back(&bvh);
+		l[list_size] = &bvh;
+		list_size++;
+
+		while (list_size != 0){
+			//const BVH* cur = l.front();
+			const BVH* cur = l[list_size-1];
+			//l.pop_front();
+			list_size--;
+
+			if (cur-> left){
+				if (cur->left-> bbox.intersect(r)){
+					//l.push_back(cur->left);
+					l[list_size] = cur -> left;
+					list_size++;
+				}
+				if (cur->right-> bbox.intersect(r)){
+					//l.push_back(cur->right);
+					l[list_size] = cur -> right;
+					list_size++;
+				}
+			} else{
+					for (int i=0; i<indices.size(); i++){
+						const Vector &A = vertices[indices[i].vtxi];
+						const Vector &B = vertices[indices[i].vtxj];
+						const Vector &C = vertices[indices[i].vtxk];
+						Vector e1 = B - A;
+						Vector e2 = C - A;
+						Vector localN = cross(e1, e2);
+						Vector OA = A - r.O;
+						double invUdotN = 1. / (dot(r.u, localN));
+						double local_t = dot(OA, localN) * invUdotN;
+						if (local_t < 0) continue;
+
+						Vector OAcrossU = cross(OA, r.u);
+						double beta = dot(e2, OAcrossU) * invUdotN;
+						if (beta < 0) continue;
+						if (beta > 1) continue;
+
+						double gamma = -dot(e1, OAcrossU) * invUdotN;
+						if (gamma < 0) continue;
+						if (gamma > 1) continue;
+
+						double alpha = 1 - beta - gamma;
+						if (alpha < 0) continue;
+
+						hasInter = true;
+						if (local_t < t) {
+							t = local_t;
+							P = A + beta * e1 + gamma * e2;
+							N = localN;
+						}
+					}
+					if (hasInter){
+						N.normalize();
+					}
+					return hasInter;
+			}
+		}
+		return false;
 	}
 
 	void readOBJ(const char* obj) {
@@ -399,17 +478,56 @@ public:
 
 	}
 
+	void buildBVH(BVH* curNode, int triStart, int triEnd){
+		curNode -> start = triStart;
+		curNode -> end = triEnd;
+		curNode -> left = NULL;
+		curNode -> right = NULL;
+		curNode -> bbox = compute_bbox(triStart, triEnd);
+
+		Vector diag = curNode -> bbox.M - curNode -> bbox.m;
+		int longestAxis;
+		if (diag[0] >= diag[1] && diag[0] >= diag[2]){
+			longestAxis = 0;
+		} else if (diag[1] >= diag[0] && diag[1] >= diag[2]) {
+			longestAxis = 1;
+		} else {
+			longestAxis = 2;
+		}
+
+		double middleSplit = curNode -> bbox.m[longestAxis] + diag[longestAxis] * 0.5;
+
+		int pivot = triStart;
+		for (int i= triStart; i < triEnd; i++){
+			double middleTriangle = (vertices[indices[i].vtxi][longestAxis] + vertices[indices[i].vtxj][longestAxis] + vertices[indices[i].vtxk][longestAxis]) / 3;
+			if (middleTriangle < middleSplit) {
+				std::swap(indices[i], indices[pivot]);
+				pivot++;
+			}
+		}
+
+		if (pivot-triStart <= 1 || triEnd - pivot <= 1 || triEnd-triStart < 5){
+			return;
+		}
+
+		curNode -> left = new BVH;
+		curNode -> right = new BVH;
+
+		buildBVH(curNode->left, triStart, pivot);
+		buildBVH(curNode-> right, pivot, triEnd);
+	}
+
 	std::vector<TriangleIndices> indices;
 	std::vector<Vector> vertices;
 	std::vector<Vector> normals;
 	std::vector<Vector> uvs;
 	std::vector<Vector> vertexcolors;
-	BoundingBox bbox;
+	BVH bvh;
 };
 
 class Sphere : public Geometry {
 public:
-	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false) : ::Geometry(albedo, isMirror, isTransparent), C(C), R(R) {};
+	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isInverted = false) : ::Geometry(albedo, isMirror, isTransparent), C(C), R(R), isInverted(isInverted) {};
 
 	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
 		double delta = sqr(dot(r.u, r.O-C)) - ((r.O-C).norm2() - R*R);
@@ -429,11 +547,16 @@ public:
 		P = r.O + t * r.u;
 		N = P - C;
 		N.normalize();
+
+		if (isInverted){
+			N = (-1.)*N;
+		}
 		return true;
 	}
 
 	Vector C;
 	double R;
+	bool isInverted;
 };
 
 class Scene{
@@ -536,7 +659,6 @@ public:
 			Ray indirectRay(P + 0.001 * N, wi); 
 			return objects[objectID]->albedo * getColor(indirectRay, bounce - 1) + color;
 		}
-		//std::cout << 1 << std::endl;
 		return color;
 	}
 
@@ -559,9 +681,9 @@ int main() {
 
 	Scene s;
 	// Spheres
-	//s.addSphere(new Sphere(Vector(0,0,0), 10, Vector(1, 0.5, 0.3), false, false));
+	//s.addSphere(new Sphere(Vector(0,0,0), 10, Vector(1, 0.5, 0.3), false, true));
 	//s.addSphere(new Sphere(Vector(20,0,0), 10, Vector(1, 0.5, 0.3), false, true));
-	//s.addSphere(Sphere(Vector(20,0,0), 9, Vector(1, 0.5, 0.3), false, true));
+	//s.addSphere(new Sphere(Vector(20,0,0), 9.5, Vector(1, 0.5, 0.3), false, true, true));
 	//s.addSphere(new Sphere(Vector(-20,0,0), 10, Vector(1, 0.5, 0.3), true, false));
 	// Ceiling and floor
 	s.addSphere(new Sphere(Vector(0,1000,0), 940, Vector(1, 0, 0))); // Ceiling
@@ -575,7 +697,7 @@ int main() {
 	TriangleMesh *m = new TriangleMesh(Vector(0.2, 0.4, 0.6));
 	m->readOBJ("cat_model/cat.obj");
 	m->translate_and_scale(Vector(0,-10,0), 0.8);
-	m->compute_bbox();
+	m->buildBVH(&m->bvh, 0, m->indices.size());
 	s.addMesh(m);
 
 	Vector C(0,0,55); // camera view
@@ -609,7 +731,7 @@ int main() {
 			image[(i * W + j) * 3 + 2] = std::min(255.0, std::pow(pixelColor[2], 0.45));
 		}
 	}
-	stbi_write_png("image.png", W, H, 3, &image[0], 0);
+	stbi_write_png("images/image.png", W, H, 3, &image[0], 0);
 
 	return 0;
 }
