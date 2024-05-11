@@ -110,12 +110,12 @@ public:
 
 class Geometry{
 public:
-	Geometry(const Vector& albedo, bool isMirror, bool isTransparent) : albedo(albedo), isMirror(isMirror), isTransparent(isTransparent) {}
+	Geometry(const Vector& albedo, bool isMirror, bool isTransparent, bool isInverted) : albedo(albedo), isMirror(isMirror), isTransparent(isTransparent), isInverted(isInverted) {}
 
 	virtual bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const = 0;
 
 	Vector albedo;
-	bool isMirror, isTransparent;
+	bool isMirror, isTransparent, isInverted;
 };
 
 class TriangleIndices {
@@ -168,7 +168,7 @@ public:
 
 class TriangleMesh : public Geometry {
 public:
-	TriangleMesh(const Vector& albedo, bool isMirror = false, bool isTransparent = false) : ::Geometry(albedo, isMirror, isTransparent) {};
+	TriangleMesh(const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isInverted = false) : ::Geometry(albedo, isMirror, isTransparent, isInverted) {};
 	~TriangleMesh() {};
 
 	void translate_and_scale(const Vector& translate, double scale) {
@@ -236,6 +236,9 @@ public:
 		}
 		if (hasInter){
 			N.normalize();
+			if (isInverted){
+				N = (-1.)*N;
+			}
 		}
 		return hasInter; */
 		
@@ -297,6 +300,9 @@ public:
 					}
 					if (hasInter){
 						N.normalize();
+						if (isInverted){
+							N = (-1.)*N;
+						}
 					}
 					return hasInter;
 			}
@@ -527,7 +533,7 @@ public:
 
 class Sphere : public Geometry {
 public:
-	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isInverted = false) : ::Geometry(albedo, isMirror, isTransparent), C(C), R(R), isInverted(isInverted) {};
+	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isInverted = false) : ::Geometry(albedo, isMirror, isTransparent, isInverted), C(C), R(R) {};
 
 	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
 		double delta = sqr(dot(r.u, r.O-C)) - ((r.O-C).norm2() - R*R);
@@ -549,14 +555,13 @@ public:
 		N.normalize();
 
 		if (isInverted){
-			N = (-1.)*N;
+			N = -N;
 		}
 		return true;
 	}
 
 	Vector C;
 	double R;
-	bool isInverted;
 };
 
 class Scene{
@@ -668,9 +673,10 @@ public:
 };
 
 int main() {
-	int W = 264;
-	int H = 264;
-	int nrays = 10;
+	int W = 512;
+	int H = 512;
+	int nrays = 32;
+	int bounces = 3;
 
 	double fov = 60 * M_PI / 180;
 	double z = -W/(2*tan(fov/2));
@@ -681,10 +687,13 @@ int main() {
 
 	Scene s;
 	// Spheres
-	//s.addSphere(new Sphere(Vector(0,0,0), 10, Vector(1, 0.5, 0.3), false, true));
-	//s.addSphere(new Sphere(Vector(20,0,0), 10, Vector(1, 0.5, 0.3), false, true));
-	//s.addSphere(new Sphere(Vector(20,0,0), 9.5, Vector(1, 0.5, 0.3), false, true, true));
-	//s.addSphere(new Sphere(Vector(-20,0,0), 10, Vector(1, 0.5, 0.3), true, false));
+	// transparent
+	s.addSphere(new Sphere(Vector(10,12,0), 5, Vector(1, 0.5, 0.3), false, true)); 
+	// transparent hollow (does not work right now, but it works in my soft shadow script (without the soft shadow))
+	//s.addSphere(new Sphere(Vector(-15,10,0), 5, Vector(1, 0.5, 0.3), false, true));
+	//s.addSphere(new Sphere(Vector(-15,10,0), 4.5, Vector(1, 0.5, 0.3), false, true, true));
+	// mirror (reflective)
+	s.addSphere(new Sphere(Vector(13,-5,20), 5, Vector(1, 0.5, 0.3), true, false));
 	// Ceiling and floor
 	s.addSphere(new Sphere(Vector(0,1000,0), 940, Vector(1, 0, 0))); // Ceiling
 	s.addSphere(new Sphere(Vector(0,-1000,0), 990, Vector(0, 0, 1))); // Floor
@@ -694,15 +703,23 @@ int main() {
 	s.addSphere(new Sphere(Vector(0,0,1000), 940, Vector(0.7, 0.2, 0.5))); // back
 	s.addSphere(new Sphere(Vector(0,0,-1000), 940, Vector(0, 1, 0))); // front
 
-	TriangleMesh *m = new TriangleMesh(Vector(0.2, 0.4, 0.6));
-	m->readOBJ("cat_model/cat.obj");
-	m->translate_and_scale(Vector(0,-10,0), 0.8);
-	m->buildBVH(&m->bvh, 0, m->indices.size());
-	s.addMesh(m);
+	// Objects
+	// cat
+	TriangleMesh *cat = new TriangleMesh(Vector(0.3, 0.2, 0.25));
+	cat->readOBJ("objects/cat.obj");
+	cat->translate_and_scale(Vector(-15,-10,0), 0.5);
+	cat->buildBVH(&cat->bvh, 0, cat->indices.size());
+	s.addMesh(cat);
+	// stool
+	TriangleMesh *stool = new TriangleMesh(Vector(0.6, 0.4, 0.2));
+	stool->readOBJ("objects/stool.obj");
+	stool->translate_and_scale(Vector(10,-2,0), 3);
+	stool->buildBVH(&stool->bvh, 0, stool->indices.size());
+	s.addMesh(stool);
 
 	Vector C(0,0,55); // camera view
 	s.L = Vector(-10, 20, 40); // Light ray
-	s.I = 2E10;
+	s.I = 3E10;
 
 	std::vector<unsigned char> image(W * H * 3, 0);
 #pragma omp parallel for schedule(dynamic, 1)
@@ -723,7 +740,7 @@ int main() {
 				Vector u(j-W/2+0.5+r1, H/2-i-0.5+r2, z);
 				u.normalize();
 				Ray r(C, u);
-				pixelColor += s.getColor(r, 3)/nrays;		
+				pixelColor += s.getColor(r, bounces)/nrays;		
 			}
 
 			image[(i * W + j) * 3 + 0] = std::min(255.0, std::pow(pixelColor[0], 0.45)); // including gamma correction
