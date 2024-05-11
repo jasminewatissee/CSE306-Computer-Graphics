@@ -267,7 +267,7 @@ public:
 					list_size++;
 				}
 			} else{
-					for (int i=0; i<indices.size(); i++){
+					for (int i=cur->start; i< cur->end; i++){
 						const Vector &A = vertices[indices[i].vtxi];
 						const Vector &B = vertices[indices[i].vtxj];
 						const Vector &C = vertices[indices[i].vtxk];
@@ -304,10 +304,9 @@ public:
 							N = (-1.)*N;
 						}
 					}
-					return hasInter;
 			}
 		}
-		return false;
+		return hasInter;
 	}
 
 	void readOBJ(const char* obj) {
