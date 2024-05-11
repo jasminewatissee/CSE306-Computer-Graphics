@@ -1,19 +1,20 @@
 CXX = g++
 CXXFLAGS = -g3 -Wall -pthread -L/usr/local/opt/libomp/lib -I/usr/local/opt/libomp/include -Xpreprocessor -fopenmp -lomp -Ofast
 
-all: template
+all: raytracer soft_shadow
 
 clean: 
-	rm -f template template.o
+	rm -f raytracer main.o
+	rm -f soft_shadow soft_shadow.o
 
-template: template.o
+raytracer: main.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-template.o: template.cpp
+main.o: main.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-soft_shadow: template_soft_shadow.o
+soft_shadow: soft_shadow.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-template_soft_shadow.o: template_soft_shadow.cpp
+soft_shadow.o: soft_shadow.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<

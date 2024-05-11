@@ -103,16 +103,16 @@ Vector random_cos(const Vector& N){
 
 class Ray {
 public:
-	Ray(const Vector& O, const Vector& u): O(O), u(u) {};
+	Ray(const Vector& Origin, const Vector& direction): Origin(Origin), direction(direction) {};
 
-	Vector O, u;
+	Vector Origin, direction;
 };
 
 class Geometry{
 public:
 	Geometry(const Vector& albedo, bool isMirror, bool isTransparent, bool isInverted) : albedo(albedo), isMirror(isMirror), isTransparent(isTransparent), isInverted(isInverted) {}
 
-	virtual bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const = 0;
+	virtual bool intersect(const Ray& ray, Vector& P, Vector& N, double &t) const = 0;
 
 	Vector albedo;
 	bool isMirror, isTransparent, isInverted;
@@ -132,20 +132,20 @@ class BoundingBox {
 public:
 	Vector m, M;
 
-	bool intersect(const Ray& r) const {
-		Vector invr(1./r.u[0], 1. / r.u[1], 1./r.u[2]);
-		double t0x = (m[0] - r.O[0]) * invr[0];
-		double t1x = (M[0] - r.O[0]) * invr[0];
+	bool intersect(const Ray& ray) const {
+		Vector invr(1./ray.direction[0], 1. / ray.direction[1], 1./ray.direction[2]);
+		double t0x = (m[0] - ray.Origin[0]) * invr[0];
+		double t1x = (M[0] - ray.Origin[0]) * invr[0];
 		double tminx = std::min(t0x, t1x);
 		double tmaxx = std::max(t0x, t1x);
 
-		double t0y = (m[1] - r.O[1]) * invr[1];
-		double t1y = (M[1] - r.O[1]) * invr[1];
+		double t0y = (m[1] - ray.Origin[1]) * invr[1];
+		double t1y = (M[1] - ray.Origin[1]) * invr[1];
 		double tminy = std::min(t0y, t1y);
 		double tmaxy = std::max(t0y, t1y);
 
-		double t0z = (m[2] - r.O[2]) * invr[2];
-		double t1z = (M[2] - r.O[2]) * invr[2];
+		double t0z = (m[2] - ray.Origin[2]) * invr[2];
+		double t1z = (M[2] - ray.Origin[2]) * invr[2];
 		double tminz = std::min(t0z, t1z);
 		double tmaxz = std::max(t0z, t1z);
 
@@ -196,11 +196,11 @@ public:
 		return bbox;
 	}
 
-	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
+	bool intersect(const Ray& ray, Vector& P, Vector& N, double &t) const {
 		bool hasInter = false;
 		t = 1E9;
 
-		if (!bvh.bbox.intersect(r)) return false;
+		if (!bvh.bbox.intersect(ray)) return false;
 
 		// Without BVH
 		/* for (int i=0; i<indices.size(); i++){
@@ -211,12 +211,12 @@ public:
 			Vector e1 = B - A;
 			Vector e2 = C - A;
 			Vector localN = cross(e1, e2);
-			Vector OA = A - r.O;
-			double invUdotN = 1. / (dot(r.u, localN));
+			Vector OA = A - ray.Origin;
+			double invUdotN = 1. / (dot(ray.direction, localN));
 			double local_t = dot(OA, localN) * invUdotN;
 			if (local_t < 0) continue;
 
-			Vector OAcrossU = cross(OA, r.u);
+			Vector OAcrossU = cross(OA, ray.direction);
 			double beta = dot(e2, OAcrossU) * invUdotN;
 			if (beta < 0) continue;
 			if (beta > 1) continue;
@@ -256,12 +256,12 @@ public:
 			list_size--;
 
 			if (cur-> left){
-				if (cur->left-> bbox.intersect(r)){
+				if (cur->left-> bbox.intersect(ray)){
 					//l.push_back(cur->left);
 					l[list_size] = cur -> left;
 					list_size++;
 				}
-				if (cur->right-> bbox.intersect(r)){
+				if (cur->right-> bbox.intersect(ray)){
 					//l.push_back(cur->right);
 					l[list_size] = cur -> right;
 					list_size++;
@@ -274,12 +274,12 @@ public:
 						Vector e1 = B - A;
 						Vector e2 = C - A;
 						Vector localN = cross(e1, e2);
-						Vector OA = A - r.O;
-						double invUdotN = 1. / (dot(r.u, localN));
+						Vector OA = A - ray.Origin;
+						double invUdotN = 1. / (dot(ray.direction, localN));
 						double local_t = dot(OA, localN) * invUdotN;
 						if (local_t < 0) continue;
 
-						Vector OAcrossU = cross(OA, r.u);
+						Vector OAcrossU = cross(OA, ray.direction);
 						double beta = dot(e2, OAcrossU) * invUdotN;
 						if (beta < 0) continue;
 						if (beta > 1) continue;
@@ -533,15 +533,15 @@ public:
 
 class Sphere : public Geometry {
 public:
-	Sphere(const Vector& C, double R, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isInverted = false) : ::Geometry(albedo, isMirror, isTransparent, isInverted), C(C), R(R) {};
+	Sphere(const Vector& Center, double Radius, const Vector& albedo, bool isMirror = false, bool isTransparent = false, bool isInverted = false) : ::Geometry(albedo, isMirror, isTransparent, isInverted), Center(Center), Radius(Radius) {};
 
-	bool intersect(const Ray& r, Vector& P, Vector& N, double &t) const {
-		double delta = sqr(dot(r.u, r.O-C)) - ((r.O-C).norm2() - R*R);
+	bool intersect(const Ray& ray, Vector& P, Vector& N, double &t) const {
+		double delta = sqr(dot(ray.direction, ray.Origin - Center)) - ((ray.Origin - Center).norm2() - Radius * Radius);
 		if (delta < 0) return false;
 
 		// Compute the two ray sphere intersection
-		double t1 = dot(r.u,C-r.O) - sqrt(delta);
-		double t2 = dot(r.u,C-r.O) + sqrt(delta);
+		double t1 = dot(ray.direction, Center - ray.Origin) - sqrt(delta);
+		double t2 = dot(ray.direction, Center - ray.Origin) + sqrt(delta);
 
 		if (t2 < 0) return false;
 		
@@ -550,8 +550,8 @@ public:
 		} else {
 			t = t2;
 		}
-		P = r.O + t * r.u;
-		N = P - C;
+		P = ray.Origin + t * ray.direction;
+		N = P - Center;
 		N.normalize();
 
 		if (isInverted){
@@ -560,22 +560,22 @@ public:
 		return true;
 	}
 
-	Vector C;
-	double R;
+	Vector Center;
+	double Radius;
 };
 
 class Scene{
 public:
-	bool intersect(const Ray& r, Vector& P, Vector& N, int& objectID, double& bestt ) const {
-		bestt = 1E9;
+	bool intersect(const Ray& ray, Vector& P, Vector& N, int& objectID, double& best_t ) const {
+		best_t = 1E9;
 		double t;
 		Vector Ptmp, Ntmp;
 		bool has_inter = false;
 
 		for (int i=0; i< objects.size(); i++){
-			if (objects[i]->intersect(r, Ptmp, Ntmp, t)) {
-				if (t < bestt){
-					bestt = t;
+			if (objects[i]->intersect(ray, Ptmp, Ntmp, t)) {
+				if (t < best_t){
+					best_t = t;
 					P = Ptmp;
 					N = Ntmp;
 					objectID = i;
@@ -606,7 +606,7 @@ public:
 		if (inter){
 
 			if (objects[objectID]->isMirror) { // computations for mirror surfaces (reflection)
-				Ray reflected(P + 0.001 * N, r.u - 2 * dot(r.u, N) * N); // ray of reflection
+				Ray reflected(P + 0.001 * N, r.direction - 2 * dot(r.direction, N) * N); // ray of reflection
 				return getColor(reflected, bounce-1); // recur on surfaces to continue mirroring
 			}
 			if (objects[objectID]->isTransparent) { // computations for transparent surfaces following lecture 1 (refraction)
@@ -614,15 +614,15 @@ public:
 				double n2 = 1.5;
 
 				Vector correctN = N;
-				if (dot(N, r.u) > 0){
+				if (dot(N, r.direction) > 0){
 					correctN = -N; 
 					std::swap(n1, n2);
 				}
 
-				Vector Tt = n1/ n2 * (r.u - dot(r.u, correctN) * correctN);
-				double d = 1 - sqr(n1 / n2) * (1 - sqr(dot(r.u, correctN)));
+				Vector Tt = n1/ n2 * (r.direction - dot(r.direction, correctN) * correctN);
+				double d = 1 - sqr(n1 / n2) * (1 - sqr(dot(r.direction, correctN)));
 				if (d < 0) {
-					Ray reflected(P + 0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
+					Ray reflected(P + 0.001 * correctN, r.direction - 2 * dot(r.direction, correctN) * correctN);
 					return getColor(reflected, bounce-1);
 				}
 
@@ -631,10 +631,10 @@ public:
 
 				// Fresnel
 				double k0 = sqr(n1 - n2) / sqr(n1 + n2);
-				double R = k0 + (1 - k0)* pow(1 - std::abs(dot(correctN, r.u)), 5); // reflection coefficient
+				double R = k0 + (1 - k0)* pow(1 - std::abs(dot(correctN, r.direction)), 5); // reflection coefficient
 				double u = (double)rand()/(double)RAND_MAX;
 				if (u < R){
-					Ray reflected(P + 0.001 * correctN, r.u - 2 * dot(r.u, correctN) * correctN);
+					Ray reflected(P + 0.001 * correctN, r.direction - 2 * dot(r.direction, correctN) * correctN);
 					return getColor(reflected, bounce-1);
 				}
 
@@ -679,29 +679,29 @@ int main() {
 	int bounces = 3;
 
 	double fov = 60 * M_PI / 180;
-	double z = -W/(2*tan(fov/2));
+	double z = -W / (2 * tan(fov / 2));
 
 	for (int i = 0; i<8; i++){
 		engine[i].seed(i);
 	}
 
-	Scene s;
+	Scene scene;
 	// Spheres
 	// transparent
-	s.addSphere(new Sphere(Vector(10,12,0), 5, Vector(1, 0.5, 0.3), false, true)); 
+	scene.addSphere(new Sphere(Vector(10,12,0), 5, Vector(1, 0.5, 0.3), false, true)); 
 	// transparent hollow (does not work right now, but it works in my soft shadow script (without the soft shadow))
 	//s.addSphere(new Sphere(Vector(-15,10,0), 5, Vector(1, 0.5, 0.3), false, true));
 	//s.addSphere(new Sphere(Vector(-15,10,0), 4.5, Vector(1, 0.5, 0.3), false, true, true));
 	// mirror (reflective)
-	s.addSphere(new Sphere(Vector(13,-5,20), 5, Vector(1, 0.5, 0.3), true, false));
+	scene.addSphere(new Sphere(Vector(13,-5,20), 5, Vector(1, 0.5, 0.3), true, false));
 	// Ceiling and floor
-	s.addSphere(new Sphere(Vector(0,1000,0), 940, Vector(1, 0, 0))); // Ceiling
-	s.addSphere(new Sphere(Vector(0,-1000,0), 990, Vector(0, 0, 1))); // Floor
+	scene.addSphere(new Sphere(Vector(0,1000,0), 940, Vector(1, 0, 0))); // Ceiling
+	scene.addSphere(new Sphere(Vector(0,-1000,0), 990, Vector(0, 0, 1))); // Floor
 	// Walls
-	s.addSphere(new Sphere(Vector(1000,0,0), 920, Vector(0.1, 0.5, 0.8))); // right
-	s.addSphere(new Sphere(Vector(-1000,0,0), 920, Vector(0.5, 0.9, 0.1))); // left
-	s.addSphere(new Sphere(Vector(0,0,1000), 940, Vector(0.7, 0.2, 0.5))); // back
-	s.addSphere(new Sphere(Vector(0,0,-1000), 940, Vector(0, 1, 0))); // front
+	scene.addSphere(new Sphere(Vector(1000,0,0), 920, Vector(0.1, 0.5, 0.8))); // right
+	scene.addSphere(new Sphere(Vector(-1000,0,0), 920, Vector(0.5, 0.9, 0.1))); // left
+	scene.addSphere(new Sphere(Vector(0,0,1000), 940, Vector(0.7, 0.2, 0.5))); // back
+	scene.addSphere(new Sphere(Vector(0,0,-1000), 940, Vector(0, 1, 0))); // front
 
 	// Objects
 	// cat
@@ -709,17 +709,17 @@ int main() {
 	cat->readOBJ("objects/cat.obj");
 	cat->translate_and_scale(Vector(-15,-10,0), 0.5);
 	cat->buildBVH(&cat->bvh, 0, cat->indices.size());
-	s.addMesh(cat);
+	scene.addMesh(cat);
 	// stool
 	TriangleMesh *stool = new TriangleMesh(Vector(0.6, 0.4, 0.2));
 	stool->readOBJ("objects/stool.obj");
 	stool->translate_and_scale(Vector(10,-2,0), 3);
 	stool->buildBVH(&stool->bvh, 0, stool->indices.size());
-	s.addMesh(stool);
+	scene.addMesh(stool);
 
-	Vector C(0,0,55); // camera view
-	s.L = Vector(-10, 20, 40); // Light ray
-	s.I = 3E10;
+	Vector Cam(0,0,55); // camera point of view
+	scene.L = Vector(-10, 20, 40); // Light source
+	scene.I = 3E10; // Light intensity
 
 	std::vector<unsigned char> image(W * H * 3, 0);
 #pragma omp parallel for schedule(dynamic, 1)
@@ -733,14 +733,14 @@ int main() {
 				// box Muller
 				double u1 = uniform(engine[tid]);
 				double u2 = uniform(engine[tid]);
-				double r1 = cos(2*M_PI*u1)*sqrt(-2*log(u2))*0.4;
-				double r2 = sin(2*M_PI*u1)*sqrt(-2*log(u2))*0.4;
+				double r1 = cos(2 * M_PI * u1) * sqrt(-2 * log(u2)) * 0.4;
+				double r2 = sin(2 * M_PI * u1) * sqrt(-2 * log(u2)) * 0.4;
 
-				// vector of the view u
-				Vector u(j-W/2+0.5+r1, H/2-i-0.5+r2, z);
+				// vector of the direction of the view u from the camera
+				Vector u(j - W / 2 + 0.5 + r1, H / 2 - i - 0.5 + r2, z);
 				u.normalize();
-				Ray r(C, u);
-				pixelColor += s.getColor(r, bounces)/nrays;		
+				Ray r(Cam, u);
+				pixelColor += scene.getColor(r, bounces)/nrays;		
 			}
 
 			image[(i * W + j) * 3 + 0] = std::min(255.0, std::pow(pixelColor[0], 0.45)); // including gamma correction
