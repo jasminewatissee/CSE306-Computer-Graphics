@@ -4,7 +4,9 @@ Author: Jasmine Watissee (jasmine.watissee@polytechnique.edu)
 
 ## Download
 
-
+```sh
+$ git clone https://github.com/jasminewatissee/CSE306-Computer-Graphics.git
+```
 
 ## Raytracer
 
@@ -33,11 +35,24 @@ $ ./raytracer
 
 You can modify the content of the scene in the function main() 
 
+To run the soft_shadow script even though it doesn't give the expected result, you can do:
+
+```sh
+$ cd RayTracer/
+$ make soft_shadow
+$ ./soft_shadow
+```
+
 ## Color Matching
 
 ![Final Image](Lab5%20-%20Color%20Matching/image_color_matched.png)
 
 ### Usage
 
+```sh
+$ cd Lab5\ -\ Color\ Matching
+$ make
+$ ./main
+```
 
 ## Second project ...
