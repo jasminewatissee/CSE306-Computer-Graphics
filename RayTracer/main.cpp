@@ -674,8 +674,10 @@ public:
 int main() {
 	int W = 512;
 	int H = 512;
-	int nrays = 32;
-	int bounces = 3;
+	int nrays = 64;
+	int bounces = 5;
+
+	auto start = std::chrono::high_resolution_clock::now(); 
 
 	double fov = 60 * M_PI / 180;
 	double z = -W / (2 * tan(fov / 2));
@@ -715,7 +717,7 @@ int main() {
 	stool->translate_and_scale(Vector(10,-2,0), 3);
 	stool->buildBVH(&stool->bvh, 0, stool->indices.size());
 	scene.addMesh(stool);
-
+	
 	Vector Cam(0,0,55); // camera point of view
 	scene.L = Vector(-10, 20, 40); // Light source
 	scene.I = 3E10; // Light intensity
@@ -748,6 +750,12 @@ int main() {
 		}
 	}
 	stbi_write_png("images/image.png", W, H, 3, &image[0], 0);
+
+	std::cout << "Done" << std::endl;
+    auto stop = std::chrono::high_resolution_clock::now(); 
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+	std::cout << "Execution time (seconds):" << std::endl;
+	std::cout << duration.count()/1000/1000 << std::endl;
 
 	return 0;
 }
