@@ -1,0 +1,10 @@
+<svg xmlns = "http://www.w3.org/2000/svg" width = "1000" height = "1000">
+<g>
+<polygon points = "0.000, 1000.000 0.000, 0.000 1000.000, 0.000 "
+fill = "none" stroke = "black"/>
+</g>
+<g>
+<polygon points = "500.000, 500.000 500.000, 0.000 1000.000, 700.000 300.000, 700.000 "
+fill = "none" stroke = "black"/>
+</g>
+</svg>
