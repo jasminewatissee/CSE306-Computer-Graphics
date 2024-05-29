@@ -72,13 +72,3 @@ int main() {
 
 	return 0;
 }
-
-/* 	for (int i = 0; i < H; i++) {
-		for (int j = 0; j < W; j++) {
-
-			image_result[(i*W + j) * 3 + 0] = image_double[(i*W+j)*3+0]*0.5;
-			image_result[(i*W + j) * 3 + 1] = image_double[(i*W+j)*3+1]*0.3;
-			image_result[(i*W + j) * 3 + 2] = image_double[(i*W+j)*3+2]*0.2;
-		}
-	}
-*/
