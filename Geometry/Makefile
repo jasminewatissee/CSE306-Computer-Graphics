@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -g3 -Wall -llbfgs
+CXXFLAGS = -g3 -Wall -L/usr/local/opt/libomp/lib -I/usr/local/opt/libomp/include -Xpreprocessor -fopenmp -Ofast -llbfgs -lomp
 
 all: geo
 
