@@ -1,6 +1,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <chrono>
 #include <iostream>
 #include <sstream>
 
@@ -610,7 +611,7 @@ public:
 		ot.optimize_fluid();
 
 		for (int i=0; i<500; i++){
-			time_step(0.002);
+			time_step(0.01);
 			save_frame(ot.diagram.cells, "results/animations/anim", i);
 		}
 	}
@@ -635,6 +636,8 @@ int main(int argc, char* argv[]){
 		std::cerr << "3 for a Fluid Simulation" << std::endl;
         return 1;
 	}
+
+	auto start = std::chrono::high_resolution_clock::now();
 
 	if (std::stoi(argv[1]) == 0){
 		Voronoi vor;
@@ -675,5 +678,11 @@ int main(int argc, char* argv[]){
 		std::cerr << "Wrong option, please use 0 for Voronoi, 1 for OT or 2 for OT with circles and 3 for FluidSimulator" << std::endl;
         return 1;
 	}
+
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+	std::cout << "Execution time (seconds):" << std::endl;
+	std::cout << duration.count()/1000/1000 << std::endl;
+
 	return 0;
 }
