@@ -81,22 +81,24 @@ public:
 	double area(){
 		if (vertices.size() <= 2) return 0;
 
-		double a = 0;
+		double result = 0;
 		int n = vertices.size();
 		for (int i = 0; i < n; i++){
-			a += vertices[i][0]*vertices[(i+1)%n][1] - vertices[(i+1)%n][0]*vertices[i][1];
+			int j = (i+1)%n;
+			result += vertices[i][0]*vertices[j][1] - vertices[j][0]*vertices[i][1];
 		}
-		return std::abs(a)*0.5;
+		result = std::abs(result)*0.5;
+		return result;
 	}
 
 	double sumSquareDistance(const Vector& P){
 		if (vertices.size() <= 2) return 0;
 		if (area() == 0) return 0;
 
-		int n = vertices.size();
 		double result = 0;
-		for (int t = 1; t < n-1; t++){
-			Vector c[3] = {vertices[0], vertices[t], vertices[t+1]};
+		int n = vertices.size();
+		for (int i = 1; i < n-1; i++){
+			Vector c[3] = {vertices[0], vertices[i], vertices[i+1]};
 			double areaC = std::abs((c[2][1]-c[0][1])*(c[1][0]-c[0][0]) - (c[2][0]-c[0][0])*(c[1][1]-c[0][1]))*0.5;
 			double s = 0;
 			for (int k = 0; k < 3; k++){
@@ -112,14 +114,16 @@ public:
 	Vector centroid(){
 		if (vertices.size() <= 2) return Vector(0,0,0);
 
-		double a = area();
-		Vector c(0, 0, 0);
+		Vector result(0, 0, 0);
 		int n = vertices.size();
 		for (int i=0; i < n; i++){
-			double xy = vertices[i][0]* vertices[(i+1) % n][1] - vertices[(i+1) % n][0] * vertices[i][1]; 
-			c += Vector((vertices[i][0] + vertices[(i+1) % n][0])*xy, (vertices[i][1] + vertices[(i+1) % n][1])*xy, 0);
+			int j = (i+1) % n;
+			double xy = vertices[i][0]* vertices[j][1] - vertices[j][0] * vertices[i][1]; 
+			result += Vector((vertices[i][0] + vertices[j][0])*xy, (vertices[i][1] + vertices[j][1])*xy, 0);
 		}
-		return c/(6*a);
+		double a = area();
+		result = result / (6*a); 
+		return result;
 	}
 
 	std::vector<Vector> vertices;
@@ -216,19 +220,20 @@ void save_frame(const std::vector<Polygon> &cells, std::string filename, int fra
 
 Polygon clip_by_line(const Polygon &cell, const Vector &u, const Vector &v){
 	Vector normal(v[1]-u[1], u[0]-v[0],0);
+	
 	Polygon result;
 	int N = cell.vertices.size();
-	for (int i=0; i< N; i++){
-		const Vector& A = cell.vertices[i==0?(N-1): i-1];
+	for (int i = 0; i < N; i++){
+		const Vector& A = cell.vertices[i==0 ? (N-1): i-1];
 		const Vector& B = cell.vertices[i];
 		Vector P = A + (dot(u-A, normal)/ dot(B-A, normal)) * (B-A);
 
-		if (dot(B-u,normal) <= 0){ // B is inside
-			if (dot(A-u,normal) > 0){ // A is outside
+		if (dot(B-u, normal) <= 0){ // B is inside
+			if (dot(A-u, normal) > 0){ // A is outside
 				result.vertices.push_back(P);
 			}
 			result.vertices.push_back(B);
-		} else if (dot(A-u,normal) <= 0){ // A is inside
+		} else if (dot(A-u, normal) <= 0){ // A is inside
 			result.vertices.push_back(P);
 		}
 	}
@@ -240,20 +245,21 @@ Polygon clip_by_bisector(const Polygon &cell, const Vector &Xi, const Vector &Xj
 	Vector M = (Xi + Xj) / 2;
 	Vector offset = (wi - wj) / (2. * (Xi - Xj).norm2()) * (Xj - Xi);
 	Vector Mprime = offset + M;
+
 	Polygon result;
 	int N = cell.vertices.size();
-	for (int i=0; i< N; i++){
+	for (int i = 0; i < N; i++){
 		const Vector& A = cell.vertices[i==0? (N-1): i-1];
 		const Vector& B = cell.vertices[i];
-		double t = dot(Mprime-A, Xj - Xi) / dot(B-A, Xj - Xi);
+		double t = dot(Mprime - A, Xj - Xi) / dot(B - A, Xj - Xi);
 		Vector P = A + t * (B-A);
 
-		if ((B-Xi).norm2() - wi <= (B-Xj).norm2() - wj){ // B is inside
-			if ((A-Xi).norm2() - wi > (A-Xj).norm2() - wj){ // A is outside
+		if ((B - Xi).norm2() - wi <= (B - Xj).norm2() - wj){ // B is inside
+			if ((A - Xi).norm2() - wi > (A - Xj).norm2() - wj){ // A is outside
 				result.vertices.push_back(P);
 			}
 			result.vertices.push_back(B);
-		} else if ((A-Xi).norm2() - wi <= (A-Xj).norm2() - wj){ // A is inside
+		} else if ((A - Xi).norm2() - wi <= (A - Xj).norm2() - wj){ // A is inside
 			result.vertices.push_back(P);
 		}
 	}
@@ -263,11 +269,10 @@ Polygon clip_by_bisector(const Polygon &cell, const Vector &Xi, const Vector &Xj
 class Voronoi{
 public:
 	Voronoi(){
+		// Create a unit circle
 		for (int i=0; i<NCircles; i++){
 			double theta = i*2*M_PI / NCircles;
-			circle[i][0] = cos(theta);
-			circle[i][1] = sin(theta);
-			circle[i][2] = 0;
+			circle[i] = Vector(cos(theta), sin(theta), 0);
 		}
 	}
 
@@ -282,7 +287,6 @@ public:
 
 #pragma omp parallel for
 		for (int i = 0; i < points.size(); i++){
-			// cell i
 			Polygon cell = square;
 			Polygon result;
 			result.vertices.reserve(20);
@@ -290,8 +294,7 @@ public:
 				if (i == j) continue;
 				result.vertices.clear();
 				result = clip_by_bisector(cell, points[i], points[j], weights[i], weights[j]);
-				//cell = result
-				std::swap(result,cell);
+				std::swap(result, cell);
 			}
 			cells[i] = cell;
 		}
@@ -308,24 +311,21 @@ public:
 
 #pragma omp parallel for
 		for (int i = 0; i < points.size(); i++){
-			// cell i
 			Polygon cell = square;
-			Polygon result;
+			Polygon result, result2;
 			result.vertices.reserve(20);
 			for (int j = 0; j < points.size(); j++){
 				if (i == j) continue;
 				result.vertices.clear();
 				result = clip_by_bisector(cell, points[i], points[j], weights[i], weights[j]);
-				//cell = result
-				std::swap(result,cell);
+				std::swap(result, cell);
 			}
-			for (int j=0; j< NCircles; j++){
+			for (int j = 0; j < NCircles; j++){
 				result.vertices.clear();
 				double radius = sqrt(weights[i] - w_air);
-				Vector u = circle[j]*radius + points[i];
+				Vector u = circle[j] * radius + points[i];
 				Vector v = circle[(j+1)% NCircles]*radius + points[i];
 				result = clip_by_line(cell, u, v);
-				//cell = result;
 				std::swap(result, cell);
 			}
 			cells[i] = cell;
@@ -345,36 +345,24 @@ public:
 
 	void optimize(){
 		int N = diagram.points.size();
-		diagram.weights.resize(N);
-		for (int i=0; i < N; i++){
-			//diagram.weights[i] = rand()/double(RAND_MAX);
-			diagram.weights[i] = 1;
-		}
+		diagram.weights.resize(N, 1.);
 		
 		double objectivefct = -1;
 		lbfgs_parameter_t param;
 		lbfgs_parameter_init(&param);
 		param.linesearch = LBFGS_LINESEARCH_BACKTRACKING_WOLFE;
 
-		std::vector<double> optimized_weights(N);
-		for(int i = 0; i < N; i++){
-			optimized_weights[i] = 1;
-		}
+		std::vector<double> optimized_weights(N, 1.);
 		int ret = lbfgs(N, &optimized_weights[0], &objectivefct, _evaluate, _progress, this, &param);
 		std::cout << "L-BFGS optimization terminated with status code = " << ret<< std::endl;
 
-		for(int i = 0; i < N; i++){
-			diagram.weights[i] = optimized_weights[i];
-		}
+		diagram.weights = optimized_weights;
 		diagram.compute();
 	}
 
 	void optimize_fluid(){
 		int N = diagram.points.size();
-		diagram.weights.resize(N);
-		for (int i=0; i < N; i++){
-			diagram.weights[i] = 1;
-		}
+		diagram.weights.resize(N, 1.);
 		diagram.w_air = 0;
 		
 		double objectivefct = -1;
@@ -382,10 +370,8 @@ public:
 		lbfgs_parameter_init(&param);
 		param.linesearch = LBFGS_LINESEARCH_BACKTRACKING_WOLFE;
 
-		std::vector<double> optimized_weights(N+1, 0.999999);
-		for(int i = 0; i < N; i++){
-			optimized_weights[i] = 1;
-		}
+		std::vector<double> optimized_weights(N+1, 1.);
+		optimized_weights[N] = 0.999999;
 		int ret = lbfgs(N+1, &optimized_weights[0], &objectivefct, _evaluate_fluid, _progress_fluid, this, &param);
 		std::cout << "L-BFGS optimization terminated with status code = " << ret<< std::endl;
 
@@ -423,20 +409,21 @@ protected:
 		diagram.compute();
 
         lbfgsfloatval_t fx = 0.0;
-		double sumSquaredDistances = 0;
-		double sumAreaWeights = 0;
+		double sumSqrDists = 0;
+		double sumAreaW = 0;
 		double sumLambdaW = 0;
 
 		double lambda = 1. / n;
 
         for (int i = 0; i < n;i++) {
 			double area = diagram.cells[i].area();
-			sumLambdaW +=  lambda * diagram.weights[i];
-			sumAreaWeights += diagram.weights[i] * area;
-			sumSquaredDistances += diagram.cells[i].sumSquareDistance(diagram.points[i]);
 			g[i] = area - lambda;
+
+			sumAreaW += area * diagram.weights[i];
+			sumLambdaW +=  lambda * diagram.weights[i];
+			sumSqrDists += diagram.cells[i].sumSquareDistance(diagram.points[i]);
         }
-		fx = -(sumSquaredDistances - sumAreaWeights + sumLambdaW);
+		fx = sumAreaW - sumSqrDists - sumLambdaW;
 		return fx;
     }
 
@@ -465,26 +452,29 @@ protected:
 		diagram.compute_circles();
 
         lbfgsfloatval_t fx = 0.0;
-		double sumSquaredDistances = 0;
-		double sumAreaWeights = 0;
+		double sumSqrDists = 0;
+		double sumAreaW = 0;
 		double sumLambdaW = 0;
+		double sumArea = 0;
 
-		//double lambda = 1 / n;
-		double lambda = 0.4 / (n-1);
+		double fluid = 0.4;
+		double lambda = fluid / (n-1);
 		double desired_air = 0.6;
-		double sum_area_particles = 0;
 
-        for (int i = 0; i < n-1;i++) {
+        for (int i = 0; i < n-1; i++) {
 			double area = diagram.cells[i].area();
-			sum_area_particles += area;
-			sumLambdaW +=  lambda * diagram.weights[i];
-			sumAreaWeights += diagram.weights[i] * area;
-			sumSquaredDistances += diagram.cells[i].sumSquareDistance(diagram.points[i]);
 			g[i] = area - lambda;
+
+			sumArea += area;
+			sumAreaW += area * diagram.weights[i];
+			sumLambdaW +=  lambda * diagram.weights[i];
+			sumSqrDists += diagram.cells[i].sumSquareDistance(diagram.points[i]);
         }
-		double estimated_air = 1 - sum_area_particles;
+
+		double estimated_air = 1 - sumArea;
 		g[n-1] = estimated_air - desired_air;
-		fx = -(sumSquaredDistances - sumAreaWeights + sumLambdaW + diagram.w_air*(desired_air-estimated_air));
+
+		fx = sumAreaW - sumSqrDists - sumLambdaW + diagram.w_air * g[n-1];
 		return fx;
     }
 
@@ -516,18 +506,18 @@ protected:
         int ls
         )
     {
-		for (int i = 0; i< n; i++){
+		for (int i = 0; i < n; i++){
 			diagram.weights[i] = x[i];
 		}
 		diagram.compute();
 		
 		double maxDiff = 0;
-		for(int i=0; i<n; i++){
+		for(int i = 0; i < n; i++){
 			maxDiff = std::max(maxDiff, std::abs(diagram.cells[i].area() - (1. / n)));
 		}
 
         printf("Iteration %d:\n", k);
-        printf("  maxDiff = %f, fx = %f, \n", maxDiff*n, fx);
+        printf("  maxDiff = %f, fx = %f, \n", maxDiff * n, fx);
         printf("  xnorm = %f, gnorm = %f, step = %f\n", xnorm, gnorm, step);
         printf("\n");
         return 0;
@@ -561,19 +551,19 @@ static int _progress_fluid(
         int ls
         )
     {
-		for (int i = 0; i< n-1; i++){
+		for (int i = 0; i < n-1; i++){
 			diagram.weights[i] = x[i];
 		}
 		diagram.w_air = x[n-1];
 		diagram.compute_circles();
 		
 		double maxDiff = 0;
-		for(int i=0; i<n-1; i++){
+		for(int i = 0; i< n-1; i++){
 			maxDiff = std::max(maxDiff, std::abs(diagram.cells[i].area() - (0.4 / (n-1))));
 		}
 
         printf("Iteration %d:\n", k);
-        printf("  maxDiff = %f, fx = %f, \n", maxDiff*n, fx);
+        printf("  maxDiff = %f, fx = %f, \n", maxDiff * (n-1), fx);
         printf("  xnorm = %f, gnorm = %f, step = %f\n", xnorm, gnorm, step);
         printf("\n");
         return 0;
@@ -582,17 +572,17 @@ static int _progress_fluid(
 
 class Fluid {
 public:
-	Fluid() : epsilon(0.004), mi(200), g(Vector(0,-9.81, 0)) {}
+	Fluid() : epsilon(0.004), mass(200), gravity(Vector(0,-9.81, 0)) {}
 
 	void time_step(double dt){
 		ot.diagram.points = positions;
 		ot.optimize_fluid();
 
 		for (int i=0; i < positions.size(); i++){
-			Vector spring = 1./sqr(epsilon)*(ot.diagram.cells[i].centroid() - positions[i]);
-			Vector mg = mi * g;
+			Vector ForceSpring = 1./sqr(epsilon)*(ot.diagram.cells[i].centroid() - positions[i]);
+			Vector ForceGravity = mass * gravity;
 
-			velocity[i] += dt/mi * (spring + mg);
+			velocity[i] += dt/mass * (ForceSpring + ForceGravity);
 			positions[i] += dt * velocity[i];
 			positions[i][0] = std::min(1-1E-9, std::max(1E-9, positions[i][0]));
 			positions[i][1] = std::min(1-1E-9, std::max(1E-9, positions[i][1]));
@@ -600,18 +590,16 @@ public:
 	}
 
 	void simulate(){
-		int N = 200;
+		int N = 100;
 		positions.resize(N);
 		velocity.resize(N, Vector(0,0,0));
 
 		for (int i=0; i< N; i++){
 			positions[i] = Vector(rand()/double(RAND_MAX),rand()/double(RAND_MAX),0);
 		}
-		ot.diagram.points = positions;
-		ot.optimize_fluid();
 
 		for (int i=0; i<500; i++){
-			time_step(0.01);
+			time_step(0.005);
 			save_frame(ot.diagram.cells, "results/animations/anim", i);
 		}
 	}
@@ -619,8 +607,8 @@ public:
 	SemiDiscreteOT ot;
 	std::vector<Vector> positions;
 	std::vector<Vector> velocity;
-	double epsilon, mi;
-	Vector g;
+	double epsilon, mass;
+	Vector gravity;
 
 };
 
@@ -643,10 +631,9 @@ int main(int argc, char* argv[]){
 		Voronoi vor;
 		int N = 1000;
 		vor.points.resize(N);
-		vor.weights.resize(N);
+		vor.weights.resize(N, 1.);
 		for (int i = 0; i< N; i++){
 			vor.points[i] = Vector(rand()/double(RAND_MAX),rand()/double(RAND_MAX),0);
-			vor.weights[i] = 1;
 		}
 		vor.compute();
 		
