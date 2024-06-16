@@ -56,7 +56,7 @@ $ ./main
 ```
 
 ## Fluid Simulator
-![Final Image](Geometry/results/animation.gif)
+![Final Image](Geometry/results/animations/anim4.png)
 
 ### Features
 - Voronoï Diagram
