@@ -55,4 +55,36 @@ $ make
 $ ./main
 ```
 
-## Second project ...
+## Fluid Simulator
+![Final Image](Geometry/results/animation.gif)
+
+### Features
+- Voronoï Diagram
+- Sutherland-Hodgman polygon clipping
+- Optimisation using LBFGS
+- Disks instead of cells
+- Fluid Simulator
+
+### Usage
+
+```sh
+$ cd Geometry/
+$ make
+$ ./geo <OPT>
+```
+
+With \<OPT> being one of:
+- 0 for a Voronoï Diagram
+- 1 for an Optimized Voronoï Diagram
+- 2 for an Optimized Diagram with circles
+- 3 for a fluid simulation
+
+## Tutte embedding
+
+### Usage
+
+```sh
+$ cd Lab9\ -\ Tutte
+$ make
+$ ./main
+```

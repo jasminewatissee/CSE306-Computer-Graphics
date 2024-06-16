@@ -1,20 +1,15 @@
+#include <cmath>
+#include <omp.h>
 #include <vector>
 #include <string>
-#include <cmath>
 #include <chrono>
 #include <iostream>
 #include <sstream>
 
-#include <omp.h>
 #include "lbfgs.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
-double sqr(double x) { return x * x;}
 
 class Vector {
 public:
@@ -78,11 +73,13 @@ Vector cross(const Vector& a, const Vector& b) {
 // if the Polygon class name conflicts with a class in wingdi.h on Windows, use a namespace or change the name
 class Polygon {  
 public:
+
+	// Compute the area of the polygon
 	double area(){
-		if (vertices.size() <= 2) return 0;
+		int n = vertices.size();
+		if (n <= 2) return 0;
 
 		double result = 0;
-		int n = vertices.size();
 		for (int i = 0; i < n; i++){
 			int j = (i+1)%n;
 			result += vertices[i][0]*vertices[j][1] - vertices[j][0]*vertices[i][1];
@@ -91,12 +88,12 @@ public:
 		return result;
 	}
 
+	// Compute the sum of the squared distances of the vertices of the polygon
 	double sumSquareDistance(const Vector& P){
-		if (vertices.size() <= 2) return 0;
-		if (area() == 0) return 0;
+		int n = vertices.size();
+		if (n <= 2) return 0;
 
 		double result = 0;
-		int n = vertices.size();
 		for (int i = 1; i < n-1; i++){
 			Vector c[3] = {vertices[0], vertices[i], vertices[i+1]};
 			double areaC = std::abs((c[2][1]-c[0][1])*(c[1][0]-c[0][0]) - (c[2][0]-c[0][0])*(c[1][1]-c[0][1]))*0.5;
@@ -111,17 +108,18 @@ public:
 		return result;
 	}
 
+	// Compute the centroid of the polygon
 	Vector centroid(){
-		if (vertices.size() <= 2) return Vector(0,0,0);
+		double a = area();
+		if (a == 0) return Vector(0,0,0);
 
-		Vector result(0, 0, 0);
 		int n = vertices.size();
+		Vector result(0, 0, 0);
 		for (int i=0; i < n; i++){
 			int j = (i+1) % n;
 			double xy = vertices[i][0]* vertices[j][1] - vertices[j][0] * vertices[i][1]; 
 			result += Vector((vertices[i][0] + vertices[j][0])*xy, (vertices[i][1] + vertices[j][1])*xy, 0);
 		}
-		double a = area();
 		result = result / (6*a); 
 		return result;
 	}
@@ -218,15 +216,17 @@ void save_frame(const std::vector<Polygon> &cells, std::string filename, int fra
 		stbi_write_png(os.str().c_str(), W, H, 3, &image[0], 0);
 	}
 
+// Variation of Sutherland Hodgman Polygon Clipping algorithm
+// clip to line going from u to v
 Polygon clip_by_line(const Polygon &cell, const Vector &u, const Vector &v){
-	Vector normal(v[1]-u[1], u[0]-v[0],0);
+	Vector normal(v[1]-u[1], u[0]-v[0],0); // normal vector of the line uv
 	
 	Polygon result;
 	int N = cell.vertices.size();
 	for (int i = 0; i < N; i++){
 		const Vector& A = cell.vertices[i==0 ? (N-1): i-1];
 		const Vector& B = cell.vertices[i];
-		Vector P = A + (dot(u-A, normal)/ dot(B-A, normal)) * (B-A);
+		Vector P = A + (dot(u-A, normal)/ dot(B-A, normal)) * (B-A); // intersection point
 
 		if (dot(B-u, normal) <= 0){ // B is inside
 			if (dot(A-u, normal) > 0){ // A is outside
@@ -240,11 +240,12 @@ Polygon clip_by_line(const Polygon &cell, const Vector &u, const Vector &v){
 	return result;
 }
 
-//Sutherland Hodgman to clip cell by bissector of UV
+// Sutherland Hodgman Polygon Clipping algorithm 
+// to clip cell by bissector of Xi and Xj and depending on their respective weight wi and wj
 Polygon clip_by_bisector(const Polygon &cell, const Vector &Xi, const Vector &Xj, double& wi, double& wj){
 	Vector M = (Xi + Xj) / 2;
 	Vector offset = (wi - wj) / (2. * (Xi - Xj).norm2()) * (Xj - Xi);
-	Vector Mprime = offset + M;
+	Vector Mprime = offset + M; // bisection fo the line with a little offset
 
 	Polygon result;
 	int N = cell.vertices.size();
@@ -252,7 +253,7 @@ Polygon clip_by_bisector(const Polygon &cell, const Vector &Xi, const Vector &Xj
 		const Vector& A = cell.vertices[i==0? (N-1): i-1];
 		const Vector& B = cell.vertices[i];
 		double t = dot(Mprime - A, Xj - Xi) / dot(B - A, Xj - Xi);
-		Vector P = A + t * (B-A);
+		Vector P = A + t * (B-A); // intersection point
 
 		if ((B - Xi).norm2() - wi <= (B - Xj).norm2() - wj){ // B is inside
 			if ((A - Xi).norm2() - wi > (A - Xj).norm2() - wj){ // A is outside
@@ -276,9 +277,10 @@ public:
 		}
 	}
 
+	// Compute the cells of the Power diagram from the points
 	void compute(){
 		Polygon square;
-		square.vertices.push_back(Vector(0,0,0)); // anticlockwise
+		square.vertices.push_back(Vector(0,0,0)); // anticlockwise square
 		square.vertices.push_back(Vector(1,0,0));
 		square.vertices.push_back(Vector(1,1,0));
 		square.vertices.push_back(Vector(0,1,0));
@@ -286,7 +288,7 @@ public:
 		cells.resize(points.size());
 
 #pragma omp parallel for
-		for (int i = 0; i < points.size(); i++){
+		for (int i = 0; i < points.size(); i++){ // for each point, create the cells by clipping with all the other points
 			Polygon cell = square;
 			Polygon result;
 			result.vertices.reserve(20);
@@ -300,9 +302,10 @@ public:
 		}
 	}
 
+	// Compute the cells of the Power Diagram from the points, this time clipping also the circles
 	void compute_circles(){
 		Polygon square;
-		square.vertices.push_back(Vector(0,0,0)); // anticlockwise
+		square.vertices.push_back(Vector(0,0,0)); // anticlockwise square
 		square.vertices.push_back(Vector(1,0,0));
 		square.vertices.push_back(Vector(1,1,0));
 		square.vertices.push_back(Vector(0,1,0));
@@ -320,7 +323,8 @@ public:
 				result = clip_by_bisector(cell, points[i], points[j], weights[i], weights[j]);
 				std::swap(result, cell);
 			}
-			for (int j = 0; j < NCircles; j++){
+			// for each point intersect with the circle around it (to transform it in a circle)
+			for (int j = 0; j < NCircles; j++){ 
 				result.vertices.clear();
 				double radius = sqrt(weights[i] - w_air);
 				Vector u = circle[j] * radius + points[i];
@@ -343,35 +347,37 @@ public:
 class SemiDiscreteOT {
 public:
 
+	// Function to optimise the Power Diagram using the LBFGS library
 	void optimize(){
 		int N = diagram.points.size();
-		diagram.weights.resize(N, 1.);
+		diagram.weights.resize(N, 1.); // initialiase the weights
 		
 		double objectivefct = -1;
-		lbfgs_parameter_t param;
+		lbfgs_parameter_t param; // initialise the parameters
 		lbfgs_parameter_init(&param);
 		param.linesearch = LBFGS_LINESEARCH_BACKTRACKING_WOLFE;
 
-		std::vector<double> optimized_weights(N, 1.);
+		std::vector<double> optimized_weights(N, 1.); // initialise the weights
 		int ret = lbfgs(N, &optimized_weights[0], &objectivefct, _evaluate, _progress, this, &param);
 		std::cout << "L-BFGS optimization terminated with status code = " << ret<< std::endl;
 
 		diagram.weights = optimized_weights;
-		diagram.compute();
+		diagram.compute(); // compute the power diagram based on the optimised weights found by lbfgs
 	}
 
+	// Function to optimise the Power Diagram of a fluid using the LBFGS library
 	void optimize_fluid(){
 		int N = diagram.points.size();
-		diagram.weights.resize(N, 1.);
-		diagram.w_air = 0;
+		diagram.weights.resize(N, 1.); // initialiase the weights
+		diagram.w_air = 0; // initialiase the weight of the air
 		
 		double objectivefct = -1;
-		lbfgs_parameter_t param;
+		lbfgs_parameter_t param; // initialiase the parameters
 		lbfgs_parameter_init(&param);
 		param.linesearch = LBFGS_LINESEARCH_BACKTRACKING_WOLFE;
 
-		std::vector<double> optimized_weights(N+1, 1.);
-		optimized_weights[N] = 0.999999;
+		std::vector<double> optimized_weights(N+1, 1.); // initialiase the weights
+		optimized_weights[N] = 0.999999; // initialiase the weight of the air
 		int ret = lbfgs(N+1, &optimized_weights[0], &objectivefct, _evaluate_fluid, _progress_fluid, this, &param);
 		std::cout << "L-BFGS optimization terminated with status code = " << ret<< std::endl;
 
@@ -379,7 +385,7 @@ public:
 			diagram.weights[i] = optimized_weights[i];
 		}
 		diagram.w_air = optimized_weights[N];
-		diagram.compute_circles();
+		diagram.compute_circles(); // compute the power diagram based on the optimised weights found by lbfgs
 	}
 
 	Voronoi diagram;
@@ -406,14 +412,14 @@ protected:
 		for (int i = 0; i < n; i++){
 			diagram.weights[i] = x[i];
 		}
-		diagram.compute();
+		diagram.compute(); 
+
+		double lambda = 1. / n; 
 
         lbfgsfloatval_t fx = 0.0;
 		double sumSqrDists = 0;
 		double sumAreaW = 0;
 		double sumLambdaW = 0;
-
-		double lambda = 1. / n;
 
         for (int i = 0; i < n;i++) {
 			double area = diagram.cells[i].area();
@@ -574,14 +580,17 @@ class Fluid {
 public:
 	Fluid() : epsilon(0.004), mass(200), gravity(Vector(0,-9.81, 0)) {}
 
+	// realise one time step of the fluid simulator
 	void time_step(double dt){
 		ot.diagram.points = positions;
 		ot.optimize_fluid();
 
 		for (int i=0; i < positions.size(); i++){
-			Vector ForceSpring = 1./sqr(epsilon)*(ot.diagram.cells[i].centroid() - positions[i]);
+			// Compute the forces applied to the particles
+			Vector ForceSpring = 1./(epsilon * epsilon)*(ot.diagram.cells[i].centroid() - positions[i]);
 			Vector ForceGravity = mass * gravity;
 
+			// update the velocity and the positions of the particles
 			velocity[i] += dt/mass * (ForceSpring + ForceGravity);
 			positions[i] += dt * velocity[i];
 			positions[i][0] = std::min(1-1E-9, std::max(1E-9, positions[i][0]));
@@ -589,18 +598,19 @@ public:
 		}
 	}
 
+	// simulate the fluid
 	void simulate(){
-		int N = 100;
+		int N = 50;
 		positions.resize(N);
 		velocity.resize(N, Vector(0,0,0));
 
-		for (int i=0; i< N; i++){
+		for (int i=0; i< N; i++){ // initialise random particles positions
 			positions[i] = Vector(rand()/double(RAND_MAX),rand()/double(RAND_MAX),0);
 		}
 
-		for (int i=0; i<500; i++){
+		for (int i=0; i<500; i++){ 
 			time_step(0.005);
-			save_frame(ot.diagram.cells, "results/animations/anim", i);
+			save_frame(ot.diagram.cells, "results/animations/animat", i);
 		}
 	}
 	
